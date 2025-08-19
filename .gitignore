@@ -20,3 +20,10 @@ env/
 # Others
 *.log
 *.sqlite3
+
+# FAISS index & mapping
+app/data/faiss_index.index
+app/data/faiss_mapping.npy
+
+# Uploaded files
+uploads/

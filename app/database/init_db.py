@@ -1,6 +1,7 @@
 # database/init_db.py
 from app.database.database import engine, Base
 from app.database.models.intent import Intent
+from app.database.models.pdf import PDFDocument, PDFChunk, PDFEmbedding
 
 def init_db():
     print("Creating tables...")
