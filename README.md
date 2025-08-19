@@ -47,3 +47,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 uvicorn app.main:app --reload
+
+
+## Database
+
+Run the Migrations:
+python -m app.database.init_db
+
+Seed The Migrations:
+python -m app.database.seeders.seed_intents

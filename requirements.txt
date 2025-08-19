@@ -1,6 +1,19 @@
+# Web framework & server
 fastapi
 uvicorn[standard]
+
+# HTTP client
 httpx
+
+# Data validation & settings
 pydantic
 pydantic-settings
+
+# AI integration
 groq
+
+# ORM & Database
+sqlalchemy
+alembic
+mysqlclient   # MySQL driver (C-based, recommended for production)
+pymysql       # Pure Python MySQL driver (easier to install, good fallback)
