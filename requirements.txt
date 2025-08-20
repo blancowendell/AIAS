@@ -23,3 +23,7 @@ pymysql       # Pure Python MySQL driver (easier to install, good fallback)
 pymupdf
 python-multipart
 PyPDF2 
+
+# LLM
+faiss-cpu
+sentence-transformers

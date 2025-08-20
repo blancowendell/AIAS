@@ -2,18 +2,23 @@
 import os
 import faiss
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Optional
 from sentence_transformers import SentenceTransformer
 from PyPDF2 import PdfReader
+from fastapi import APIRouter, UploadFile, File, HTTPException
 
+# Paths
 FAISS_INDEX_PATH = "app/data/faiss_index.index"
 FAISS_MAPPING_PATH = "app/data/faiss_mapping.npy"
+UPLOAD_DIR = "app/uploads"
 os.makedirs(os.path.dirname(FAISS_INDEX_PATH), exist_ok=True)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# Embedding model
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
+# Text chunking
 def chunk_text(text: str, chunk_size: int = 300, overlap: int = 50) -> List[str]:
-    """Split long text into overlapping chunks for better embedding."""
     words = text.split()
     chunks = []
     for i in range(0, len(words), chunk_size - overlap):
@@ -22,10 +27,11 @@ def chunk_text(text: str, chunk_size: int = 300, overlap: int = 50) -> List[str]
             chunks.append(chunk)
     return chunks
 
+# VectorStore class
 class VectorStore:
     def __init__(self):
         self.index = None
-        self.mapping = []  # list of dicts: {"text":..., "filename":..., "page":...}
+        self.mapping = []  # {"text":..., "filename":..., "page":..., "tags":[...]}
         self._load_index()
 
     def _load_index(self):
@@ -51,7 +57,8 @@ class VectorStore:
                 metadata.append({
                     "text": chunk,
                     "filename": t.get("filename", ""),
-                    "page": t.get("page", None)
+                    "page": t.get("page", None),
+                    "tags": t.get("tags", [])
                 })
 
         if all_chunks:
@@ -60,7 +67,7 @@ class VectorStore:
             self.mapping.extend(metadata)
             self.save_index()
 
-    def search(self, query: str, top_k: int = 5) -> List[Dict]:
+    def search(self, query: str, top_k: int = 5, similarity_threshold: float = 0.5, tag_filter: Optional[str] = None) -> List[Dict]:
         if len(self.mapping) == 0:
             return []
 
@@ -69,27 +76,33 @@ class VectorStore:
 
         results = []
         for i, idx in enumerate(indices[0]):
-            if idx < len(self.mapping):
-                result = self.mapping[idx].copy()
-                result["score"] = float(distances[0][i])
-                results.append(result)
+            if idx >= len(self.mapping):
+                continue
+            similarity = 1 / (1 + float(distances[0][i]))  # L2 -> similarity 0-1
+            entry = self.mapping[idx].copy()
+            entry["score"] = similarity
+            if similarity < similarity_threshold:
+                continue
+            if tag_filter and tag_filter not in entry.get("tags", []):
+                continue
+            results.append(entry)
+
+        results.sort(key=lambda x: x["score"], reverse=True)
         return results
 
-# Singleton instance
+# Singleton
 vector_store = VectorStore()
 
-def insert_document(text: str, filename: str = "", page: int = None):
-    vector_store.add_texts([{"text": text, "filename": filename, "page": page}])
+# Helpers
+def insert_document(text: str, filename: str = "", page: Optional[int] = None, tags: Optional[List[str]] = None):
+    vector_store.add_texts([{"text": text, "filename": filename, "page": page, "tags": tags or []}])
 
-def search_documents(query: str, top_k: int = 5):
-    return vector_store.search(query, top_k)
+def search_documents(query: str, top_k: int = 5, similarity_threshold: float = 0.5, tag_filter: Optional[str] = None):
+    return vector_store.search(query, top_k=top_k, similarity_threshold=similarity_threshold, tag_filter=tag_filter)
 
-# --- PDF upload route ---
-from fastapi import APIRouter, UploadFile, File, HTTPException
 
+# PDF Upload Route
 router = APIRouter()
-UPLOAD_DIR = "app/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
@@ -100,22 +113,16 @@ async def upload_pdf(file: UploadFile = File(...)):
 
         reader = PdfReader(file_path)
         pages_processed = 0
-
         for i, page in enumerate(reader.pages, start=1):
             text = page.extract_text()
             if text:
-                # Chunk the page into smaller parts for better embedding
-                insert_document(text, filename=file.filename, page=i)
+                insert_document(text, filename=file.filename, page=i, tags=["document"])
                 pages_processed += 1
 
         if pages_processed == 0:
-            raise HTTPException(status_code=400, detail="No extractable text found in PDF")
+            raise HTTPException(status_code=400, detail="No extractable text found")
 
-        return {
-            "message": "PDF uploaded and processed successfully",
-            "pages": pages_processed,
-            "filename": file.filename
-        }
+        return {"message": "PDF processed successfully", "pages": pages_processed, "filename": file.filename}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
