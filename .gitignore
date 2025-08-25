@@ -22,8 +22,9 @@ env/
 *.sqlite3
 
 # FAISS index & mapping
-app/data/faiss_index.index
-app/data/faiss_mapping.npy
+data/faiss_index.index
+data/faiss_mapping.npy
 
 # Uploaded files
 uploads/
+routes/uploads/
