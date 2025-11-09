@@ -24,14 +24,11 @@ def compute_overlap_score(
     counter = Counter(chunk_words)
     score = sum((counter & Counter(query_words)).values())
     
-    # Extra weight for keyword matches
     score += sum(2 for w in query_words if w in chunk_keywords)
     
-    # Extra weight if query words appear in section title
     section_words = normalize_text(section_title).split()
     score += sum(1.5 for w in query_words if w in section_words)
 
-    # Extra weight for subsection matches
     if subsection_title:
         subsection_words = normalize_text(subsection_title).split()
         score += sum(1 for w in query_words if w in subsection_words)
@@ -64,7 +61,6 @@ def find_relevant_chunks(message: str, db: Session, top_n: int = 5):
                 "page": chunk.pc_page_number
             })
 
-    # Sort by highest score first
     scored_chunks.sort(key=lambda x: x["score"], reverse=True)
 
     return scored_chunks[:top_n]
@@ -82,11 +78,10 @@ def extract_snippet(chunk_text: str, query_words: list[str], window: int = 50) -
             while end < len(chunk_text) and chunk_text[end] != " ":
                 end += 1
             snippet = chunk_text[start:end].strip()
-            # Highlight keyword matches
             for w in query_words:
                 snippet = re.sub(fr"\b({re.escape(w)})\b", r"**\1**", snippet, flags=re.IGNORECASE)
             return snippet
-    return chunk_text[:200]  # fallback
+    return chunk_text[:200]
 
 async def handle_pdf_question(message: str, db: Session) -> dict:
     """
